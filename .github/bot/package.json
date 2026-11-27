@@ -1,0 +1,8 @@
+{
+  "name": "bot-i324-s4-release",
+  "private": true,
+  "description": "Bot des missions I324 S4 (release)",
+  "dependencies": {
+    "js-yaml": "^5.5.0"
+  }
+}

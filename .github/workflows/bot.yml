@@ -1,0 +1,53 @@
+name: Bot
+
+# Répond à l'élève après chaque push sur main, chaque tag, et à la fin de chaque workflow.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_run:
+    workflows: [CI, Release, Version]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+  packages: read
+
+concurrency:
+  group: bot
+  cancel-in-progress: false
+
+jobs:
+  bot:
+    name: Bot release
+    if: github.event_name != 'push' || github.event.deleted == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      - name: Installer le bot
+        run: npm ci --prefix .github/bot --no-audit --no-fund
+      - name: Vérifier les missions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENEMENT: ${{ github.event_name }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          SORTIE: ${{ runner.temp }}/resultat.json
+        run: node .github/bot/bot.js
+      - name: Répondre
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RES: ${{ runner.temp }}/resultat.json
+          REPO: ${{ github.repository }}
+        run: |
+          node -e "const r=require(process.env.RES);if(r.commentaire)require('fs').writeFileSync('corps.json',JSON.stringify({body:r.commentaire}));require('fs').writeFileSync('sha.txt',r.sha||'')"
+          if [ -f corps.json ]; then
+            gh api -X POST "repos/$REPO/commits/$(cat sha.txt)/comments" --input corps.json > /dev/null
+          fi
